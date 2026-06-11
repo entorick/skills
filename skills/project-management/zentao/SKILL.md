@@ -78,3 +78,5 @@ python zentao.py get "m=project&f=task&projectID=852"
 - Credentials can also be supplied via `ZENTAO_URL` / `ZENTAO_COOKIE` env vars.
 - ZenTao version assumed: **12.5.3 open-source**. Endpoint module/method names follow that
   version's scheme.
+- Inline image URLs embedded in bug steps use **relative paths** (e.g. `/index.php?m=file&f=read&t=png&fileID=123`)
+  without any host prefix, so they work correctly regardless of which host/network the viewer uses.

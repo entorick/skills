@@ -45,10 +45,8 @@ def load_config():
     return {}
 
 
-def save_config(url, cookie, public_url=None):
+def save_config(url, cookie):
     cfg = {"url": url, "cookie": cookie}
-    if public_url:
-        cfg["public_url"] = public_url
     with open(CONFIG_PATH, "w", encoding="utf-8") as f:
         json.dump(cfg, f)
 
@@ -57,13 +55,12 @@ def resolve_creds(args):
     cfg = load_config()
     url = (getattr(args, "url", None) or os.environ.get("ZENTAO_URL") or cfg.get("url"))
     cookie = (getattr(args, "cookie", None) or os.environ.get("ZENTAO_COOKIE") or cfg.get("cookie"))
-    public_url = (getattr(args, "public_url", None) or os.environ.get("ZENTAO_PUBLIC_URL") or cfg.get("public_url"))
     if not url or not cookie:
         raise RuntimeError(
             "No ZenTao host/cookie. Pass --url/--cookie with --save, "
             "or set ZENTAO_URL/ZENTAO_COOKIE env vars."
         )
-    return url.rstrip("/"), cookie, (public_url.rstrip("/") if public_url else None)
+    return url.rstrip("/"), cookie
 
 
 # ---------------------------------------------------------------------------
@@ -201,29 +198,23 @@ def get_kuid(session, base, product_id, project_id):
     return m.group(1)
 
 
-def upload_inline_image(session, base, img_bytes, kuid, filename="screenshot.png",
-                        public_base=None):
-    """Upload image via ajaxUpload; returns the full inline URL or None on failure.
+def upload_inline_image(session, base, img_bytes, kuid, filename="screenshot.png"):
+    """Upload image via ajaxUpload; returns the relative path or None on failure.
 
-    Args:
-        base:        The host used for HTTP requests (may be a direct IP/port).
-        public_base: The public-facing host to embed in the <img src> URL.
-                     If None, falls back to base. Use this when the server is
-                     accessed via a direct IP but the public URL differs
-                     (e.g. base="http://172.16.1.250:8087",
-                           public_base="https://icafe.linkdoc.com").
+    Returns the server-provided relative URL (e.g. /index.php?m=file&f=read&...)
+    without any host prefix, so the embedded <img src> works regardless of
+    which host the viewer uses to access ZenTao.
 
     Tries the original bytes first. Falls back to JPEG compression if rejected.
     """
     mime = "image/png" if filename.lower().endswith(".png") else "image/jpeg"
     upload_url = f"{base}/index.php?m=file&f=ajaxUpload&uid={kuid}"
-    url_base = public_base or base
 
     r = session.post(upload_url, files={"imgFile": (filename, io.BytesIO(img_bytes), mime)}, timeout=30)
     if r.status_code == 200:
         data = r.json()
         if data.get("error") == 0:
-            return url_base + data["url"]
+            return data["url"]
 
     # Fallback: compress and retry as JPEG
     print(f"  [warn] original upload failed (HTTP {r.status_code}), retrying with compression...")
@@ -233,7 +224,7 @@ def upload_inline_image(session, base, img_bytes, kuid, filename="screenshot.png
     if r2.status_code == 200:
         data2 = r2.json()
         if data2.get("error") == 0:
-            return url_base + data2["url"]
+            return data2["url"]
 
     print(f"  [error] upload failed even after compression")
     return None
@@ -267,14 +258,11 @@ def trim_bug(view_data):
 
 def create_bug(session, base, product_id, project_id, title, steps,
                severity="3", pri="3", bug_type="codeerror", build="trunk",
-               image_paths=None, image_bytes_list=None, kuid=None,
-               public_base=None):
+               image_paths=None, image_bytes_list=None, kuid=None):
     """Create a bug, optionally embedding images inline in the steps field.
 
     Args:
         base:        Host used for HTTP requests (may be a direct IP).
-        public_base: Public-facing host to embed in <img src> URLs.
-                     Defaults to base when not set.
         image_paths: File paths — uploaded inline at original quality.
         image_bytes_list: Raw bytes (e.g. from Excel) — same treatment.
         kuid: Pre-fetched KindEditor uid; fetched automatically if None.
@@ -288,14 +276,14 @@ def create_bug(session, base, product_id, project_id, title, steps,
             fname = os.path.basename(path)
             with open(path, "rb") as fh:
                 raw = fh.read()
-            url = upload_inline_image(session, base, raw, kuid, fname, public_base=public_base)
+            url = upload_inline_image(session, base, raw, kuid, fname)
             if url:
                 inline_urls.append(url)
 
     if image_bytes_list:
         for i, raw_bytes in enumerate(image_bytes_list):
             url = upload_inline_image(session, base, raw_bytes, kuid,
-                                      f"screenshot_{i+1}.png", public_base=public_base)
+                                      f"screenshot_{i+1}.png")
             if url:
                 inline_urls.append(url)
 
@@ -344,12 +332,10 @@ def create_bug(session, base, product_id, project_id, title, steps,
 
 def edit_bug(session, base, bug_id, product_id, project_id, title, steps,
              severity="3", pri="3", bug_type="codeerror", build="trunk",
-             image_paths=None, image_bytes_list=None, kuid=None,
-             public_base=None):
+             image_paths=None, image_bytes_list=None, kuid=None):
     """Edit an existing bug, replacing steps and optionally uploading new inline images.
 
     Always passes product and project to avoid clearing them.
-    public_base: public-facing host for <img src> URLs (see create_bug).
     """
     if (image_paths or image_bytes_list) and kuid is None:
         kuid = get_kuid(session, base, product_id, project_id)
@@ -360,14 +346,14 @@ def edit_bug(session, base, bug_id, product_id, project_id, title, steps,
             fname = os.path.basename(path)
             with open(path, "rb") as fh:
                 raw = fh.read()
-            url = upload_inline_image(session, base, raw, kuid, fname, public_base=public_base)
+            url = upload_inline_image(session, base, raw, kuid, fname)
             if url:
                 inline_urls.append(url)
 
     if image_bytes_list:
         for i, raw_bytes in enumerate(image_bytes_list):
             url = upload_inline_image(session, base, raw_bytes, kuid,
-                                      f"screenshot_{i+1}.png", public_base=public_base)
+                                      f"screenshot_{i+1}.png")
             if url:
                 inline_urls.append(url)
 
@@ -445,13 +431,11 @@ def main(argv=None):
     p = argparse.ArgumentParser(description="ZenTao 12.5.3 API helper")
     p.add_argument("--url",        help="ZenTao base URL, e.g. http://172.16.1.250:8087")
     p.add_argument("--cookie",     help="Session cookie string")
-    p.add_argument("--public-url", help="Public-facing host for inline image URLs "
-                                        "(e.g. https://icafe.linkdoc.com). "
-                                        "Use when --url is a direct IP/port but images "
-                                        "must reference the public reverse-proxy host.",
-                   dest="public_url")
     p.add_argument("--save",       action="store_true", help="Cache --url/--cookie for reuse")
-    sub = p.add_subparsers(dest="cmd", required=True)
+    sub_kwargs = {"dest": "cmd"}
+    if sys.version_info >= (3, 7):
+        sub_kwargs["required"] = True
+    sub = p.add_subparsers(**sub_kwargs)
 
     # --- read commands ---
     sub.add_parser("my-bugs", help="Bugs for the logged-in user")
@@ -494,116 +478,6 @@ def main(argv=None):
     eb.add_argument("--build",    default="trunk")
     eb.add_argument("--images",   nargs="*", default=[], metavar="FILE",
                     help="Image paths — uploaded inline in steps at original quality")
-
-    args = p.parse_args(argv)
-
-    try:
-        url, cookie = resolve_creds(args)
-        if args.save:
-            save_config(url, cookie)
-
-        session = make_session(cookie)
-
-        if args.cmd == "my-bugs":
-            _output(fetch(session, url, "m=my&f=bug"))
-
-        elif args.cmd == "bug":
-            data = fetch(session, url, f"m=bug&f=view&bugID={args.id}")
-            _output(data if args.raw else trim_bug(data))
-
-        elif args.cmd == "product-bugs":
-            _output(fetch(session, url, f"m=bug&f=browse&productID={args.productID}"))
-
-        elif args.cmd == "products":
-            _output(fetch(session, url, "m=product&f=all"))
-
-        elif args.cmd == "get":
-            _output(fetch(session, url, args.query))
-
-        elif args.cmd == "create-bug":
-            result = create_bug(
-                session, url,
-                product_id=args.product,
-                project_id=args.project,
-                title=args.title,
-                steps=args.steps,
-                severity=args.severity,
-                pri=args.pri,
-                bug_type=args.bug_type,
-                build=args.build,
-                image_paths=args.images or [],
-                public_base=public_url,
-            )
-            _output(result)
-
-        elif args.cmd == "edit-bug":
-            result = edit_bug(
-                session, url,
-                bug_id=args.bug_id,
-                product_id=args.product,
-                project_id=args.project,
-                title=args.title,
-                steps=args.steps,
-                severity=args.severity,
-                pri=args.pri,
-                bug_type=args.bug_type,
-                build=args.build,
-                image_paths=args.images or [],
-                public_base=public_url,
-            )
-            _output(result)
-
-    except RuntimeError as e:
-        msg = str(e)
-        if msg.startswith("AUTH_EXPIRED"):
-            print("AUTH_EXPIRED: " + msg, file=sys.stderr)
-            return 2
-        print("ERROR: " + msg, file=sys.stderr)
-        return 1
-
-    return 0
-
-    # --- read commands ---
-    sub.add_parser("my-bugs", help="Bugs for the logged-in user")
-
-    b = sub.add_parser("bug", help="Bug detail")
-    b.add_argument("id")
-    b.add_argument("--raw", action="store_true")
-
-    pb = sub.add_parser("product-bugs", help="Bug list for a product")
-    pb.add_argument("productID")
-
-    sub.add_parser("products", help="Product id→name map")
-
-    g = sub.add_parser("get", help="Generic GET passthrough")
-    g.add_argument("query", help='e.g. "m=task&f=view&taskID=1"')
-
-    # --- create-bug ---
-    cb = sub.add_parser("create-bug", help="Create a bug with optional inline images")
-    cb.add_argument("--product",  required=True)
-    cb.add_argument("--project",  required=True)
-    cb.add_argument("--title",    required=True)
-    cb.add_argument("--steps",    default="")
-    cb.add_argument("--severity", default="3")
-    cb.add_argument("--pri",      default="3")
-    cb.add_argument("--type",     default="codeerror", dest="bug_type")
-    cb.add_argument("--build",    default="trunk")
-    cb.add_argument("--images",   nargs="*", default=[], metavar="FILE",
-                    help="Image paths — uploaded inline in steps (original quality)")
-
-    # --- edit-bug ---
-    eb = sub.add_parser("edit-bug", help="Edit an existing bug, always preserving product/project")
-    eb.add_argument("--id",       required=True, dest="bug_id")
-    eb.add_argument("--product",  required=True)
-    eb.add_argument("--project",  required=True)
-    eb.add_argument("--title",    required=True)
-    eb.add_argument("--steps",    default="")
-    eb.add_argument("--severity", default="3")
-    eb.add_argument("--pri",      default="3")
-    eb.add_argument("--type",     default="codeerror", dest="bug_type")
-    eb.add_argument("--build",    default="trunk")
-    eb.add_argument("--images",   nargs="*", default=[], metavar="FILE",
-                    help="Image paths — uploaded inline in steps (original quality)")
 
     args = p.parse_args(argv)
 
