@@ -9,13 +9,24 @@ This repo manages a personal collection of Claude Code skills — markdown files
 ## Structure
 
 ```
-skills/          # All skill files live here
-  <category>/    # Group by domain when the collection grows (e.g., devops/, frontend/, workflow/)
-  *.md           # Individual skill files
-templates/       # Templates for creating new skills
+index.md                          # Skill registry — keep updated when adding/removing skills
+skills/
+  <category>/                     # Grouped by domain
+    <skill-name>/
+      SKILL.md                    # Skill definition (frontmatter + instructions)
+      *.py / *.sh / ...          # Supporting scripts and files
+      .gitignore                  # Skill-level gitignore for credentials/caches
+templates/
+  skill-template.md               # Starter template for new skills
 ```
 
-Skills can be placed directly in `skills/` or grouped into subdirectories by category. Use lowercase kebab-case for all file and directory names (e.g., `code-review.md`, `feature-dev/`).
+All skills live under `skills/<category>/<skill-name>/`. Use lowercase kebab-case for all names (e.g., `project-management/zentao/`).
+
+### Current categories
+
+| Category | Scope |
+|----------|-------|
+| `project-management` | Project tracking and issue management tools |
 
 ## Skill File Format
 
@@ -38,7 +49,9 @@ Instructions...
 
 ## Adding a New Skill
 
-1. Copy `templates/skill-template.md` to `skills/<name>.md` (or `skills/<category>/<name>.md`).
-2. Fill in the frontmatter (`name`, `description`).
-3. Write clear, actionable instructions in the body.
-4. Test by invoking it with `/<name>` in a Claude Code session that has access to this repo's skills.
+1. Create `skills/<category>/<skill-name>/` (create the category dir if it doesn't exist yet).
+2. Copy `templates/skill-template.md` to that folder as `SKILL.md`, fill in frontmatter (`name`, `description`).
+3. Add any supporting files (scripts, references) alongside `SKILL.md`.
+4. Add a `.gitignore` for credentials or build artifacts (e.g., `.config.json`, `__pycache__/`).
+5. Update `index.md` with the new skill entry.
+6. Test by copying the folder to `~/.claude/skills/<skill-name>/` and invoking `/<skill-name>`.
