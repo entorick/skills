@@ -109,8 +109,10 @@ def _decode_envelope(raw):
 
 
 def fetch(session, base, query, timeout=30):
-    sep = "&" if "?" in query else "?"
-    url = base + "/index.php?" + query + sep + "t=json"
+    # We always prepend "/index.php?", so the separator before t=json is
+    # always "&". (The old code used "?" when the query had no "?", producing
+    # "...bugID=67106?t=json" → ZenTao returned "Bad Request!".)
+    url = base + "/index.php?" + query.lstrip("?") + "&t=json"
     r = session.get(url, timeout=timeout)
     r.raise_for_status()
     return _decode_envelope(r.text)
@@ -394,6 +396,105 @@ def edit_bug(session, base, bug_id, product_id, project_id, title, steps,
     return {"result": "success", "bugID": bug_id, "inlineImages": len(inline_urls)}
 
 
+# ZenTao 12.5.3 bug resolution codes (the `resolution` field on the resolve form).
+RESOLUTION_CODES = {
+    "resolved":   "已解决",
+    "duplicate":  "重复Bug",
+    "notrepro":   "无法重现",
+    "postpone":   "延期处理",
+    "willnotfix": "不予解决",
+    "bydesign":   "设计如此",
+    "tostory":    "转为需求",
+}
+
+
+def resolve_bug(session, base, bug_id, resolution, comment="", build="",
+                assigned_to="", duplicate_bug=""):
+    """Resolve a bug (status: active → resolved) via the resolve endpoint.
+
+    Args:
+        bug_id:       ZenTao bug ID.
+        resolution:   One of RESOLUTION_CODES keys (resolved/duplicate/notrepro/...).
+        comment:      Resolution note appended to the bug's history.
+        build:        resolvedBuild — required by ZenTao when resolution=='resolved'
+                      (a build id or 'trunk'); ignored for other resolutions.
+        assigned_to:  Reassign after resolve; empty lets ZenTao auto-assign to opener.
+        duplicate_bug: Required when resolution=='duplicate' (the original bug ID).
+
+    Returns the trimmed bug after resolve (so caller can confirm status/resolution).
+    """
+    if resolution not in RESOLUTION_CODES:
+        raise RuntimeError(
+            f"Unknown resolution '{resolution}'. Valid: {', '.join(RESOLUTION_CODES)}"
+        )
+    if resolution == "resolved" and not build:
+        # ZenTao's resolve form requires a build for 'resolved'; default to trunk.
+        build = "trunk"
+    if resolution == "duplicate" and not duplicate_bug:
+        raise RuntimeError("resolution='duplicate' requires --duplicate-bug <bugID>")
+
+    post_data = [
+        ("resolution", resolution),
+        ("comment", comment),
+    ]
+    if resolution == "resolved":
+        post_data.append(("resolvedBuild", build))
+    if assigned_to:
+        post_data.append(("assignedTo", assigned_to))
+    if resolution == "duplicate":
+        post_data.append(("duplicateBug", str(duplicate_bug)))
+
+    url = f"{base}/index.php?m=bug&f=resolve&bugID={bug_id}&t=json"
+    r = session.post(url, data=post_data, timeout=30)
+    # Response on success: {"status":"success","data":"{\"locate\":\"...bug&f=view...\"}","md5":"..."}
+    # _decode_envelope raises on auth-expiry/non-success; a locate redirect = success.
+    try:
+        data = _decode_envelope(r.text)
+    except RuntimeError:
+        # Distinguish a genuine failure (no locate, non-success envelope) from auth.
+        outer = json.loads(r.text) if r.text else {}
+        if isinstance(outer, dict) and outer.get("status") == "success":
+            data = outer.get("data")
+        else:
+            raise RuntimeError(f"Resolve failed (HTTP {r.status_code}): {r.text[:300]}")
+
+    # Re-fetch the bug to confirm the new status/resolution.
+    view = fetch(session, base, f"m=bug&f=view&bugID={bug_id}")
+    trimmed = trim_bug(view)
+    return {
+        "result": "success",
+        "bugID": bug_id,
+        "status": trimmed.get("status"),
+        "resolution": trimmed.get("resolution"),
+        "resolvedBy": trimmed.get("resolvedBy"),
+    }
+
+
+def close_bug(session, base, bug_id, comment=""):
+    """Close a resolved bug (status: resolved → closed).
+
+    ZenTao's close action only needs a comment; no other required fields.
+    """
+    post_data = [("comment", comment)]
+    url = f"{base}/index.php?m=bug&f=close&bugID={bug_id}&t=json"
+    r = session.post(url, data=post_data, timeout=30)
+    try:
+        _decode_envelope(r.text)
+    except RuntimeError:
+        outer = json.loads(r.text) if r.text else {}
+        if not (isinstance(outer, dict) and outer.get("status") == "success"):
+            raise RuntimeError(f"Close failed (HTTP {r.status_code}): {r.text[:300]}")
+
+    view = fetch(session, base, f"m=bug&f=view&bugID={bug_id}")
+    trimmed = trim_bug(view)
+    return {
+        "result": "success",
+        "bugID": bug_id,
+        "status": trimmed.get("status"),
+        "closedBy": trimmed.get("closedBy"),
+    }
+
+
 # ---------------------------------------------------------------------------
 # Excel extraction
 # ---------------------------------------------------------------------------
@@ -479,6 +580,25 @@ def main(argv=None):
     eb.add_argument("--images",   nargs="*", default=[], metavar="FILE",
                     help="Image paths — uploaded inline in steps at original quality")
 
+    # --- resolve-bug ---
+    rb = sub.add_parser("resolve-bug", help="Resolve a bug (active → resolved)")
+    rb.add_argument("--id",         required=True, dest="bug_id")
+    rb.add_argument("--resolution", required=True,
+                    choices=sorted(RESOLUTION_CODES),
+                    help="Resolution code: " + ", ".join(
+                        f"{k}={v}" for k, v in sorted(RESOLUTION_CODES.items())))
+    rb.add_argument("--comment",    default="")
+    rb.add_argument("--build",      default="",
+                    help="resolvedBuild (for resolution=resolved; default trunk)")
+    rb.add_argument("--assigned-to", default="", dest="assigned_to")
+    rb.add_argument("--duplicate-bug", default="", dest="duplicate_bug",
+                    help="Original bug ID (required when resolution=duplicate)")
+
+    # --- close-bug ---
+    cl = sub.add_parser("close-bug", help="Close a resolved bug (resolved → closed)")
+    cl.add_argument("--id",      required=True, dest="bug_id")
+    cl.add_argument("--comment", default="")
+
     args = p.parse_args(argv)
 
     try:
@@ -532,6 +652,26 @@ def main(argv=None):
                 bug_type=args.bug_type,
                 build=args.build,
                 image_paths=args.images or [],
+            )
+            _output(result)
+
+        elif args.cmd == "resolve-bug":
+            result = resolve_bug(
+                session, url,
+                bug_id=args.bug_id,
+                resolution=args.resolution,
+                comment=args.comment,
+                build=args.build,
+                assigned_to=args.assigned_to,
+                duplicate_bug=args.duplicate_bug,
+            )
+            _output(result)
+
+        elif args.cmd == "close-bug":
+            result = close_bug(
+                session, url,
+                bug_id=args.bug_id,
+                comment=args.comment,
             )
             _output(result)
 

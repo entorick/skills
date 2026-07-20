@@ -42,12 +42,40 @@ running from the skill dir):
 | `python zentao.py product-bugs <productID>` | bug list for a product |
 | `python zentao.py products` | product id → name map |
 | `python zentao.py get "m=X&f=Y&..."` | generic passthrough for any endpoint |
+| `python zentao.py resolve-bug --id <id> --resolution <code> [--comment ...]` | resolve a bug (active → resolved); returns confirmed status/resolution/resolvedBy |
+| `python zentao.py close-bug --id <id> [--comment ...]` | close a resolved bug (resolved → closed); returns confirmed status/closedBy |
 
 `bug <id>` returns: id, title, status, severity, pri, type, confirmed, product (+ resolved
 productName), project, module, branch, plan, story, task, keywords, os, browser, steps,
 openedBy/Date, assignedTo/Date, resolvedBy/resolution/resolvedBuild/resolvedDate,
 duplicateBug, closedBy/Date, lastEditedBy/Date, mailto, and `actions` (history). Use `--raw`
 for everything ZenTao returns.
+
+## Resolving / closing bugs
+
+`resolve-bug` POSTs to `m=bug&f=resolve&bugID=<id>` and re-fetches the bug to confirm.
+`--resolution` is required and must be one of:
+
+| code | meaning |
+|---|---|
+| `resolved` | 已解决 (also pass `--build`, default `trunk`) |
+| `duplicate` | 重复Bug (also pass `--duplicate-bug <bugID>`) |
+| `notrepro` | 无法重现 |
+| `postpone` | 延期处理 |
+| `willnotfix` | 不予解决 |
+| `bydesign` | 设计如此 |
+| `tostory` | 转为需求 |
+
+`--comment` becomes the resolution note in the bug's history. Example:
+
+```bash
+python zentao.py resolve-bug --id 67109 --resolution notrepro \
+  --comment "不复现: 2026-07-20 复现脚本已验证当前代码正确处理"
+```
+
+`close-bug` POSTs to `m=bug&f=close&bugID=<id>` (only `--comment` is accepted). A bug must
+already be resolved before it can be closed. Both commands need a live cookie (same
+auth/`AUTH_EXPIRED` rules as the read commands).
 
 ## Generic passthrough (tasks, stories, anything else)
 
