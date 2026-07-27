@@ -6,7 +6,7 @@ allowed-tools: Bash(python:*)
 
 # ZenTao 12.5.3 API access
 
-Read content from a ZenTao 12.5.3 open-source instance via its JSON API. The helper
+Read and write content on a ZenTao 12.5.3 open-source instance via its JSON API. The helper
 `zentao.py` handles the fragile mechanics (double-JSON-decode, unicode unescape,
 cookie-expiry detection, UTF-8 output) and caches credentials so you pass them only once.
 
@@ -42,6 +42,8 @@ running from the skill dir):
 | `python zentao.py product-bugs <productID>` | bug list for a product |
 | `python zentao.py products` | product id → name map |
 | `python zentao.py get "m=X&f=Y&..."` | generic passthrough for any endpoint |
+| `python zentao.py create-bug --product <id> --project <id> --title "..." [--steps ...] [--images f.png ...]` | create a bug, optionally with inline images |
+| `python zentao.py edit-bug --id <id> --product <id> --project <id> --title "..." [--steps ...] [--images f.png ...]` | edit an existing bug (product/project always preserved) |
 | `python zentao.py resolve-bug --id <id> --resolution <code> [--comment ...]` | resolve a bug (active → resolved); returns confirmed status/resolution/resolvedBy |
 | `python zentao.py close-bug --id <id> [--comment ...]` | close a resolved bug (resolved → closed); returns confirmed status/closedBy |
 
@@ -50,6 +52,22 @@ productName), project, module, branch, plan, story, task, keywords, os, browser,
 openedBy/Date, assignedTo/Date, resolvedBy/resolution/resolvedBuild/resolvedDate,
 duplicateBug, closedBy/Date, lastEditedBy/Date, mailto, and `actions` (history). Use `--raw`
 for everything ZenTao returns.
+
+## Creating / editing bugs
+
+Both commands require `--product`, `--project`, and `--title`. Optional flags:
+`--steps` (repro steps HTML/text), `--severity` (default 3), `--pri` (default 3),
+`--type` (default `codeerror`), `--build` (default `trunk`), and `--images` — local
+image files uploaded and embedded inline in the steps at original quality.
+
+```bash
+python zentao.py create-bug --product 118 --project 852 \
+  --title "登录页验证码不刷新" --steps "1. 打开登录页 2. ..." \
+  --severity 2 --images screenshot1.png screenshot2.png
+```
+
+`edit-bug` takes the same flags plus `--id`; it re-fetches the bug first and always
+preserves its current product/project association.
 
 ## Resolving / closing bugs
 
