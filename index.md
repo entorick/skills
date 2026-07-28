@@ -6,11 +6,13 @@ Registry of all skills maintained in this repository.
 |-------|----------|-------------|
 | [zentao](skills/project-management/zentao/) | project-management | ZenTao 12.5.3 API access — read/write bugs, tasks, stories via JSON API |
 | [md2word](skills/document/md2word/) | document | Markdown 转 Word (.docx)：** 转真正加粗、无分隔符、原生表格、中文微软雅黑 |
+| [teams-chat-export](skills/data-export/teams-chat-export/) | data-export | 导出本机 Teams 聊天记录为 markdown 全量历史（zaungast 直读本地缓存，含翻页去重与索引） |
 
 ## Categories
 
 - **project-management** — Project tracking and issue management tools (ZenTao, etc.)
 - **document** — 文档格式转换与生成（md2word 等）
+- **data-export** — 本机应用数据导出与归档（Teams 聊天记录等）
 
 ## Usage
 
