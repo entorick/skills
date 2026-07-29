@@ -1,0 +1,16 @@
+{
+  "default_agent": "codebuddy",
+  "poll_interval_sec": 10,
+  "retry": {
+    "max_attempts": 5,
+    "backoff_sec": [30, 60, 120, 240, 300],
+    "jitter": 0.15
+  },
+  "notify": {
+    "dingtalk_webhook": "",
+    "at_mobile": "",
+    "on_review": true,
+    "on_failed": true,
+    "on_session_stop": false
+  }
+}
