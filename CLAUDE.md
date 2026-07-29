@@ -39,6 +39,7 @@ for all names (e.g., `project-management/zentao/`).
 |----------|-------|
 | `project-management` | Project tracking and issue management tools |
 | `document` | 文档格式转换与生成（md → docx 等） |
+| `automation` | CLI agent 编排与自动化（看板调度、通知、重试；Node.js 技能见 agent-board） |
 
 ## Installing / Using Skills
 

@@ -111,20 +111,39 @@ def check_tests(skills):
     print("== skill tests ==")
     tested = 0
     for category, name, skill_dir in skills:
-        has_tests = any(f.startswith("test_") and f.endswith(".py")
-                        for f in os.listdir(skill_dir))
-        if not has_tests:
+        has_pytest = any(f.startswith("test_") and f.endswith(".py")
+                         for f in os.listdir(skill_dir))
+        has_npm = os.path.isfile(os.path.join(skill_dir, "package.json"))
+        if not has_pytest and not has_npm:
             continue
         tested += 1
-        r = subprocess.run(
-            [PYTEST_PY, "-m", "pytest", skill_dir, "-q", "--no-header"],
-            capture_output=True, text=True, cwd=REPO_ROOT)
-        if r.returncode != 0:
-            tail = "\n".join((r.stdout + r.stderr).splitlines()[-15:])
-            fail("%s/%s: pytest failed\n%s" % (category, name, tail))
-        else:
+        if has_pytest:
+            r = subprocess.run(
+                [PYTEST_PY, "-m", "pytest", skill_dir, "-q", "--no-header"],
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                universal_newlines=True, cwd=REPO_ROOT)
+            if r.returncode != 0:
+                tail = "\n".join(r.stdout.splitlines()[-15:])
+                fail("%s/%s: pytest failed\n%s" % (category, name, tail))
+                continue
             last = r.stdout.strip().splitlines()[-1] if r.stdout.strip() else ""
             ok("%s/%s: %s" % (category, name, last))
+        if has_npm:
+            node_modules = os.path.join(skill_dir, "node_modules")
+            if not os.path.isdir(node_modules):
+                fail("%s/%s: package.json present but node_modules missing "
+                     "(run `npm install` in the skill dir)" % (category, name))
+                continue
+            r = subprocess.run(
+                ["npm", "test", "--silent"],
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                universal_newlines=True, cwd=skill_dir)
+            if r.returncode != 0:
+                tail = "\n".join(r.stdout.splitlines()[-15:])
+                fail("%s/%s: npm test failed\n%s" % (category, name, tail))
+            else:
+                lines = [l for l in r.stdout.strip().splitlines() if "Tests" in l]
+                ok("%s/%s: npm test — %s" % (category, name, lines[-1].strip() if lines else "passed"))
     if tested == 0:
         print("      (no skills ship tests yet)")
 
@@ -136,7 +155,7 @@ def _find_pytest_interpreter():
     for cand in candidates:
         try:
             r = subprocess.run([cand, "-c", "import pytest"],
-                               capture_output=True)
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             if r.returncode == 0:
                 return cand
         except (OSError, subprocess.SubprocessError):
