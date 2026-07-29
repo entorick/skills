@@ -109,4 +109,28 @@ program
     await main({ once: opts.once });
   });
 
+const hooksCmd = program.command('hooks').description('Manage Stop/notify hooks in detected agents');
+
+hooksCmd
+  .command('enable')
+  .description('Install smart_stop (codebuddy/claude) and notify (codex) hooks')
+  .option('--agent <agent>', 'only this agent (codebuddy|claude|codex)')
+  .action(async (opts) => {
+    const { enableHooks } = await import('./hooks/install.js');
+    for (const r of enableHooks({ agents: opts.agent ? [opts.agent] : null })) {
+      console.log(`${r.changed ? '✓' : '·'} ${r.agent}: ${r.detail}`);
+    }
+  });
+
+hooksCmd
+  .command('disable')
+  .description('Remove agent-board hooks from agent configs')
+  .option('--agent <agent>', 'only this agent (codebuddy|claude|codex)')
+  .action(async (opts) => {
+    const { disableHooks } = await import('./hooks/install.js');
+    for (const r of disableHooks({ agents: opts.agent ? [opts.agent] : null })) {
+      console.log(`${r.changed ? '✓' : '·'} ${r.agent}: ${r.detail}`);
+    }
+  });
+
 program.parse();
