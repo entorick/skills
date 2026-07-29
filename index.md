@@ -8,6 +8,7 @@ Registry of all skills maintained in this repository.
 | [md2word](skills/document/md2word/) | document | Markdown 转 Word (.docx)：** 转真正加粗、无分隔符、原生表格、中文微软雅黑 |
 | [teams-chat-export](skills/data-export/teams-chat-export/) | data-export | 导出本机 Teams 聊天记录为 markdown 全量历史（zaungast 直读本地缓存，含翻页去重与索引） |
 | [skill-mining](skills/meta/skill-mining/) | meta | 定期回顾 CLI agent 工作记录，识别值得沉淀的重复手工流程（扫描摘要 + 业务耦合度裁决） |
+| [agent-board](skills/automation/agent-board/) | automation | 看板驱动的 CLI agent 自动化：markdown 看板派发任务（codebuddy/claude/codex），429 自动重试，钉钉通知，本地 web 控制台 |
 
 ## Categories
 
@@ -15,6 +16,7 @@ Registry of all skills maintained in this repository.
 - **document** — 文档格式转换与生成（md2word 等）
 - **data-export** — 本机应用数据导出与归档（Teams 聊天记录等）
 - **meta** — agent 自我迭代：从工作记录中挖掘并沉淀新能力
+- **automation** — CLI agent 编排与自动化（看板调度、通知、重试等）
 
 ## Usage
 
