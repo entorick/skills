@@ -84,4 +84,29 @@ program
   .description('Print effective config (defaults merged with config.json)')
   .action(() => console.log(JSON.stringify(loadConfig(), null, 2)));
 
+program
+  .command('notify-test')
+  .description('Send a test DingTalk message using ~/agent-board/config.json')
+  .action(async () => {
+    const { sendDingtalk } = await import('./notify.js');
+    const r = await sendDingtalk(loadConfig(), '[agent-board] 测试消息：通知通道正常');
+    if (r.skipped) {
+      console.log(`skipped: ${r.reason}`);
+      console.log('编辑 config.json 的 notify.dingtalk_webhook 后重试');
+      process.exitCode = 1;
+    } else {
+      console.log(r.ok ? 'sent ✓' : `failed: ${JSON.stringify(r)}`);
+      if (!r.ok) process.exitCode = 1;
+    }
+  });
+
+program
+  .command('dispatch')
+  .description('Run the dispatcher daemon (polls todo/, executes cards)')
+  .option('--once', 'process at most one card then exit')
+  .action(async (opts) => {
+    const { main } = await import('./dispatcher.js');
+    await main({ once: opts.once });
+  });
+
 program.parse();
