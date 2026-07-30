@@ -19,6 +19,7 @@ export const DEFAULTS = {
   notify: {
     dingtalk_webhook: '',
     at_mobile: '',
+    keyword: '',
     on_review: true,
     on_failed: true,
     on_session_stop: false,

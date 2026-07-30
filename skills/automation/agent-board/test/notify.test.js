@@ -30,6 +30,16 @@ describe('sendDingtalk', () => {
     const r = await sendDingtalk(cfg({ dingtalk_webhook: 'https://hook' }), 'x');
     expect(r.ok).toBe(false);
   });
+
+  it('prepends keyword when configured (robot keyword security)', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ errcode: 0 }) });
+    vi.stubGlobal('fetch', fetchMock);
+    await sendDingtalk(cfg({ dingtalk_webhook: 'https://h', keyword: 'agent-board' }), '任务完成');
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).text.content).toBe('agent-board 任务完成');
+    // already contains keyword → not duplicated
+    await sendDingtalk(cfg({ dingtalk_webhook: 'https://h', keyword: 'agent-board' }), '[agent-board] 任务完成');
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body).text.content).toBe('[agent-board] 任务完成');
+  });
 });
 
 describe('notifyTask', () => {

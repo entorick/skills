@@ -163,6 +163,10 @@ function Settings() {
         <input value={cfg.notify.at_mobile} onChange={(e) => set('notify.at_mobile', e.target.value)} />
       </label>
       <label>
+        机器人安全关键词（若机器人设了"自定义关键词"必填）
+        <input value={cfg.notify.keyword || ''} onChange={(e) => set('notify.keyword', e.target.value)} />
+      </label>
+      <label>
         <input type="checkbox" checked={cfg.notify.on_review} onChange={(e) => set('notify.on_review', e.target.checked)} /> 任务完成（待审核）时通知
       </label>
       <label>
