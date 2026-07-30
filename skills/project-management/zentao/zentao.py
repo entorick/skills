@@ -45,8 +45,15 @@ def load_config():
     return {}
 
 
-def save_config(url, cookie):
-    cfg = {"url": url, "cookie": cookie}
+def save_config(url, cookie=None, account=None, password=None):
+    cfg = load_config()
+    cfg["url"] = url
+    if cookie:
+        cfg["cookie"] = cookie
+    if account:
+        cfg["account"] = account
+    if password:
+        cfg["password"] = password
     with open(CONFIG_PATH, "w", encoding="utf-8") as f:
         json.dump(cfg, f)
 
@@ -55,12 +62,18 @@ def resolve_creds(args):
     cfg = load_config()
     url = (getattr(args, "url", None) or os.environ.get("ZENTAO_URL") or cfg.get("url"))
     cookie = (getattr(args, "cookie", None) or os.environ.get("ZENTAO_COOKIE") or cfg.get("cookie"))
-    if not url or not cookie:
+    account = (getattr(args, "account", None) or os.environ.get("ZENTAO_ACCOUNT") or cfg.get("account"))
+    password = (getattr(args, "password", None) or os.environ.get("ZENTAO_PASSWORD") or cfg.get("password"))
+    if not url:
         raise RuntimeError(
-            "No ZenTao host/cookie. Pass --url/--cookie with --save, "
-            "or set ZENTAO_URL/ZENTAO_COOKIE env vars."
+            "No ZenTao host. Pass --url with --save, or set ZENTAO_URL env var."
         )
-    return url.rstrip("/"), cookie
+    if not cookie and not (account and password):
+        raise RuntimeError(
+            "No ZenTao credentials. Pass --account/--password (recommended, enables "
+            "auto re-login) or --cookie with --save."
+        )
+    return url.rstrip("/"), cookie, account, password
 
 
 # ---------------------------------------------------------------------------
@@ -80,6 +93,46 @@ def make_session(cookie_str):
             session.cookies.set(k.strip(), v.strip())
     session.headers.update({"User-Agent": "Mozilla/5.0", "X-Requested-With": "XMLHttpRequest"})
     return session
+
+
+def _session_cookie_string(session):
+    return "; ".join(f"{c.name}={c.value}" for c in session.cookies)
+
+
+def login(base, account, password):
+    """Log in via the web form; returns a session cookie string.
+
+    ZenTao 12.x login flow: GET the login page to obtain a fresh session
+    (zentaosid) and the hidden `verifyRand` field, then POST the form with
+    the plaintext password. keepLogin makes the server also set za/zp
+    cookies so the session survives restarts.
+    """
+    session = make_session("")
+    r = session.get(base + "/index.php?m=user&f=login", timeout=15)
+    r.raise_for_status()
+    m = re.search(r"name=['\"]verifyRand['\"][^>]*value=['\"]([^'\"]+)", r.text)
+    if not m:
+        raise RuntimeError(
+            "Cannot find verifyRand on the login page — wrong host or not a ZenTao 12.x instance?"
+        )
+    post = [
+        ("account", account),
+        ("password", password),
+        ("keepLogin[]", "on"),
+        ("referer", "/"),
+        ("verifyRand", m.group(1)),
+    ]
+    r2 = session.post(base + "/index.php?m=user&f=login&t=json", data=post, timeout=15)
+    r2.raise_for_status()
+    try:
+        resp = json.loads(r2.text)
+    except json.JSONDecodeError:
+        raise RuntimeError("Non-JSON login response: " + r2.text[:200])
+    if resp.get("status") != "success":
+        raise RuntimeError("Login failed: " + str(resp.get("reason") or resp.get("message") or r2.text[:200]))
+    if not session.cookies.get("zentaosid"):
+        raise RuntimeError("Login appeared to succeed but no zentaosid cookie was set")
+    return _session_cookie_string(session)
 
 
 # ---------------------------------------------------------------------------
@@ -531,12 +584,17 @@ def main(argv=None):
     _force_utf8_stdio()
     p = argparse.ArgumentParser(description="ZenTao 12.5.3 API helper")
     p.add_argument("--url",        help="ZenTao base URL, e.g. http://172.16.1.250:8087")
-    p.add_argument("--cookie",     help="Session cookie string")
-    p.add_argument("--save",       action="store_true", help="Cache --url/--cookie for reuse")
+    p.add_argument("--account",    help="Login account (enables auto re-login on expiry)")
+    p.add_argument("--password",   help="Login password")
+    p.add_argument("--cookie",     help="Session cookie string (legacy; prefer --account/--password)")
+    p.add_argument("--save",       action="store_true", help="Cache creds for reuse")
     sub_kwargs = {"dest": "cmd"}
     if sys.version_info >= (3, 7):
         sub_kwargs["required"] = True
     sub = p.add_subparsers(**sub_kwargs)
+
+    # --- auth ---
+    sub.add_parser("login", help="Log in with account/password and cache the session")
 
     # --- read commands ---
     sub.add_parser("my-bugs", help="Bugs for the logged-in user")
@@ -602,78 +660,37 @@ def main(argv=None):
     args = p.parse_args(argv)
 
     try:
-        url, cookie = resolve_creds(args)
+        url, cookie, account, password = resolve_creds(args)
+
+        if args.cmd == "login":
+            if not (account and password):
+                raise RuntimeError("login requires --account and --password")
+            cookie = login(url, account, password)
+            save_config(url, cookie, account, password)
+            _output({"result": "success", "account": account})
+            return 0
+
         if args.save:
-            save_config(url, cookie)
+            save_config(url, cookie, account, password)
+
+        # If no cookie is available yet but account/password are, log in first.
+        if not cookie:
+            cookie = login(url, account, password)
+            save_config(url, cookie, account, password)
 
         session = make_session(cookie)
 
-        if args.cmd == "my-bugs":
-            _output(fetch(session, url, "m=my&f=bug"))
-
-        elif args.cmd == "bug":
-            data = fetch(session, url, f"m=bug&f=view&bugID={args.id}")
-            _output(data if args.raw else trim_bug(data))
-
-        elif args.cmd == "product-bugs":
-            _output(fetch(session, url, f"m=bug&f=browse&productID={args.productID}"))
-
-        elif args.cmd == "products":
-            _output(fetch(session, url, "m=product&f=all"))
-
-        elif args.cmd == "get":
-            _output(fetch(session, url, args.query))
-
-        elif args.cmd == "create-bug":
-            result = create_bug(
-                session, url,
-                product_id=args.product,
-                project_id=args.project,
-                title=args.title,
-                steps=args.steps,
-                severity=args.severity,
-                pri=args.pri,
-                bug_type=args.bug_type,
-                build=args.build,
-                image_paths=args.images or [],
-            )
-            _output(result)
-
-        elif args.cmd == "edit-bug":
-            result = edit_bug(
-                session, url,
-                bug_id=args.bug_id,
-                product_id=args.product,
-                project_id=args.project,
-                title=args.title,
-                steps=args.steps,
-                severity=args.severity,
-                pri=args.pri,
-                bug_type=args.bug_type,
-                build=args.build,
-                image_paths=args.images or [],
-            )
-            _output(result)
-
-        elif args.cmd == "resolve-bug":
-            result = resolve_bug(
-                session, url,
-                bug_id=args.bug_id,
-                resolution=args.resolution,
-                comment=args.comment,
-                build=args.build,
-                assigned_to=args.assigned_to,
-                duplicate_bug=args.duplicate_bug,
-            )
-            _output(result)
-
-        elif args.cmd == "close-bug":
-            result = close_bug(
-                session, url,
-                bug_id=args.bug_id,
-                comment=args.comment,
-            )
-            _output(result)
+        try:
+            return _run_command(args, session, url)
+        except RuntimeError as e:
+            # Cookie expired mid-session: re-login once with the stored account
+            # and retry the command with a fresh session.
+            if str(e).startswith("AUTH_EXPIRED") and account and password:
+                cookie = login(url, account, password)
+                save_config(url, cookie, account, password)
+                session = make_session(cookie)
+                return _run_command(args, session, url)
+            raise
 
     except RuntimeError as e:
         msg = str(e)
@@ -682,6 +699,77 @@ def main(argv=None):
             return 2
         print("ERROR: " + msg, file=sys.stderr)
         return 1
+
+    return 0
+
+
+def _run_command(args, session, url):
+    if args.cmd == "my-bugs":
+        _output(fetch(session, url, "m=my&f=bug"))
+
+    elif args.cmd == "bug":
+        data = fetch(session, url, f"m=bug&f=view&bugID={args.id}")
+        _output(data if args.raw else trim_bug(data))
+
+    elif args.cmd == "product-bugs":
+        _output(fetch(session, url, f"m=bug&f=browse&productID={args.productID}"))
+
+    elif args.cmd == "products":
+        _output(fetch(session, url, "m=product&f=all"))
+
+    elif args.cmd == "get":
+        _output(fetch(session, url, args.query))
+
+    elif args.cmd == "create-bug":
+        result = create_bug(
+            session, url,
+            product_id=args.product,
+            project_id=args.project,
+            title=args.title,
+            steps=args.steps,
+            severity=args.severity,
+            pri=args.pri,
+            bug_type=args.bug_type,
+            build=args.build,
+            image_paths=args.images or [],
+        )
+        _output(result)
+
+    elif args.cmd == "edit-bug":
+        result = edit_bug(
+            session, url,
+            bug_id=args.bug_id,
+            product_id=args.product,
+            project_id=args.project,
+            title=args.title,
+            steps=args.steps,
+            severity=args.severity,
+            pri=args.pri,
+            bug_type=args.bug_type,
+            build=args.build,
+            image_paths=args.images or [],
+        )
+        _output(result)
+
+    elif args.cmd == "resolve-bug":
+        result = resolve_bug(
+            session, url,
+            bug_id=args.bug_id,
+            resolution=args.resolution,
+            comment=args.comment,
+            build=args.build,
+            assigned_to=args.assigned_to,
+            duplicate_bug=args.duplicate_bug,
+        )
+        _output(result)
+
+    elif args.cmd == "close-bug":
+        result = close_bug(
+            session, url,
+            bug_id=args.bug_id,
+            comment=args.comment,
+        )
+        _output(result)
 
     return 0
 
