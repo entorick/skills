@@ -109,6 +109,15 @@ program
     await main({ once: opts.once });
   });
 
+program
+  .command('serve')
+  .description('Start the web console (default http://127.0.0.1:4789)')
+  .option('-p, --port <port>', 'listen port', '4789')
+  .action(async (opts) => {
+    const { startServer } = await import('./server.js');
+    await startServer(Number(opts.port));
+  });
+
 const hooksCmd = program.command('hooks').description('Manage Stop/notify hooks in detected agents');
 
 hooksCmd
