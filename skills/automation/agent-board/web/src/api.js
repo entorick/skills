@@ -1,8 +1,10 @@
-async function req(path, options = {}) {
-  const res = await fetch(path, {
-    headers: { 'Content-Type': 'application/json' },
-    ...options,
-  });
+async function req(path, { method = 'GET', body } = {}) {
+  const opts = { method };
+  if (body !== undefined) {
+    opts.headers = { 'Content-Type': 'application/json' };
+    opts.body = body;
+  }
+  const res = await fetch(path, opts);
   return res.json();
 }
 
