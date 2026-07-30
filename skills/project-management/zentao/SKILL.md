@@ -1,42 +1,48 @@
 ---
 name: zentao
-description: Use when the user wants bug, task, story, or other content from a ZenTao 12.5.3 open-source instance (e.g. "查一下禅道的bug", "get ZenTao bug 12345", or gives a reverse-proxy ZenTao URL + cookie). Requires a host and session cookie supplied by the user.
+description: Use when the user wants bug, task, story, or other content from a ZenTao 12.5.3 open-source instance (e.g. "查一下禅道的bug", "get ZenTao bug 12345", or gives a ZenTao URL). Logs in automatically with the user's account/password — no manual cookie copying needed.
 allowed-tools: Bash(python:*)
 ---
 
 # ZenTao 12.5.3 API access
 
 Read and write content on a ZenTao 12.5.3 open-source instance via its JSON API. The helper
-`zentao.py` handles the fragile mechanics (double-JSON-decode, unicode unescape,
-cookie-expiry detection, UTF-8 output) and caches credentials so you pass them only once.
+`zentao.py` handles the fragile mechanics (login, double-JSON-decode, unicode unescape,
+cookie-expiry detection + automatic re-login, UTF-8 output) and caches credentials so you
+pass them only once.
 
 ## Credential rule (REQUIRED)
 
-ZenTao needs a host (reverse-proxy address) and a live session cookie. If neither a cached
-config nor env vars are available — or any command exits with `AUTH_EXPIRED` (exit code 2) —
-**STOP and ask the user** for the host and cookie. Never invent, guess, or reuse a stale
-cookie. Save what they give you with `--save` so later commands in the session reuse it.
+ZenTao needs a host (base URL) plus the user's **account and password**. The helper logs in
+through the web form itself and caches the resulting session cookie — the user never copies
+cookies by hand.
 
-To get the cookie, the user copies it from a logged-in browser session (DevTools → Network →
-any request → `Cookie` request header, or run `document.cookie` in the console). It includes
-`zentaosid=…` plus `za`/`zp` fields.
+- If the cached config has account/password, everything is automatic: the helper logs in on
+  first use and re-logs-in transparently whenever the session expires.
+- If no cached config exists, **STOP and ask the user** for the ZenTao host, account, and
+  password, then run the `login` command below. Never invent or guess credentials.
+- If any command exits with `AUTH_EXPIRED` (exit code 2) even after the automatic re-login
+  attempt (i.e. the account has no password cached — legacy cookie-only config), ask the
+  user for their account/password and run `login`.
 
 ## First-time setup (run once, after the user provides creds)
 
 ```bash
-python ~/.claude/skills/zentao/zentao.py \
+python ~/.codebuddy/skills/zentao/zentao.py \
   --url "http://HOST:PORT" \
-  --cookie "zentaosid=...; lang=zh-cn; za=...; zp=..." \
-  --save products
+  --account "USERNAME" --password "PASSWORD" \
+  login
 ```
 
-After `--save`, later commands need no creds (use the full path to `zentao.py` when not
-running from the skill dir):
+This logs in, verifies the session, and caches host + account + password + cookie in
+`.config.json` (git-ignored). After that, later commands need no creds (use the full path
+to `zentao.py` when not running from the skill dir):
 
 ## Commands
 
 | Command | What it returns |
 |---|---|
+| `python zentao.py login` | log in with cached/`--account` creds; refreshes the cached cookie |
 | `python zentao.py my-bugs` | bugs assigned to / opened by the logged-in user |
 | `python zentao.py bug <id>` | one bug, trimmed to useful fields (`--raw` for full payload) |
 | `python zentao.py product-bugs <productID>` | bug list for a product |
@@ -110,18 +116,26 @@ python zentao.py get "m=project&f=task&projectID=852"
 ## Exit codes
 
 - `0` success
-- `1` ERROR — no creds, bad host, HTTP error, or non-success envelope
-- `2` AUTH_EXPIRED — cookie missing/expired; **ask the user for a fresh one**
+- `1` ERROR — no creds, bad host, HTTP error, login failure, or non-success envelope
+- `2` AUTH_EXPIRED — session expired **and** automatic re-login was impossible (no
+  account/password cached); ask the user for account/password and run `login`
 
 ## Notes
 
+- Login flow: the helper GETs `m=user&f=login` to obtain a fresh session plus the hidden
+  `verifyRand` field, then POSTs the form with `keepLogin` so the server also issues the
+  long-lived `za`/`zp` cookies. The resulting cookie string is cached in `.config.json`.
+- When a request hits an expired session, the helper automatically re-logs-in with the
+  cached account/password and retries the command once — invisible to the caller.
 - The response envelope is double-wrapped (`{"status":"success","data":"<json-string>"}`);
   the helper decodes both layers and restores `\uXXXX` Chinese text.
 - Under `&t=json`, an expired cookie returns a success envelope whose decoded data is
   `{"locate": "...m=user&f=login..."}` (not an HTML redirect). The helper detects both and
   raises AUTH_EXPIRED.
-- `.config.json` (cached creds) is git-ignored — it holds a live session token.
-- Credentials can also be supplied via `ZENTAO_URL` / `ZENTAO_COOKIE` env vars.
+- `.config.json` (cached creds) is git-ignored — it holds the account password and a live
+  session token.
+- Credentials can also be supplied via env vars: `ZENTAO_URL`, `ZENTAO_ACCOUNT`,
+  `ZENTAO_PASSWORD` (legacy: `ZENTAO_COOKIE`).
 - ZenTao version assumed: **12.5.3 open-source**. Endpoint module/method names follow that
   version's scheme.
 - Inline image URLs embedded in bug steps use **relative paths** (e.g. `/index.php?m=file&f=read&t=png&fileID=123`)
