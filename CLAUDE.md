@@ -18,6 +18,7 @@ task is an opportunity to iterate this repo (see "Iterating This Repo" below).
 install.sh                        # Symlink skills into ~/.claude/skills + ~/.codebuddy/skills
 index.md                          # Skill registry — keep updated when adding/removing skills
 scripts/validate.py               # Repo checks (frontmatter, index sync, pytest) — run before committing
+scripts/self-update.sh            # Pull latest skills from origin/main and re-sync symlinks
 skills/
   <category>/                     # Grouped by domain
     <skill-name>/

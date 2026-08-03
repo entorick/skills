@@ -16,14 +16,24 @@ cd skills
 
 symlink 而非拷贝：agent 在任务中迭代技能 = 直接修改本仓库，`git diff` 可见，commit 即沉淀。
 
+## 更新技能到最新
+
+```bash
+./scripts/self-update.sh    # 从 origin/main 拉取最新技能并重挂 symlink
+```
+
+或直接让 agent 用 `self-update` 技能。脚本用 git SHA 对比远端、`--ff-only` 快进拉取，
+工作区有未提交改动时自动 stash→拉取→pop，绝不静默丢数据。
+
 ## 目录导览
 
 | 路径 | 作用 |
 |------|------|
 | `skills/<类别>/<技能名>/` | 技能本体：SKILL.md（定义）+ 脚本 + 测试 |
 | `index.md` | 技能注册表 |
-| `install.sh` | 一键安装/卸载（`--remove`） |
+| `install.sh` | 一键安装/卸载（`--remove`），自动清理指向已删技能的断链 |
 | `scripts/validate.py` | 提交前校验：frontmatter、注册表同步、跑各技能测试 |
+| `scripts/self-update.sh` | 从 origin/main 拉取最新技能并重挂 symlink |
 | `templates/` | 新技能模板 |
 | `CLAUDE.md` | 给 agent 看的仓库指引（结构、创建技能、迭代规范） |
 
