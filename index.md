@@ -10,6 +10,7 @@ Registry of all skills maintained in this repository.
 | [skill-mining](skills/meta/skill-mining/) | meta | 定期回顾 CLI agent 工作记录，识别值得沉淀的重复手工流程（扫描摘要 + 业务耦合度裁决） |
 | [feishu](skills/integration/feishu/) | integration | 通过 lark-cli 访问飞书文档/表格/Wiki/多维表格/云空间（检测+安装+导出，含 --raw/wiki-unwrap/bot权限等踩坑修复） |
 | [agent-board](skills/automation/agent-board/) | automation | 看板驱动的 CLI agent 自动化：markdown 看板派发任务（codebuddy/claude/codex），429 自动重试，钉钉通知，本地 web 控制台 |
+| [cloud-llm-api](skills/integration/cloud-llm-api/) | integration | 调用国内云端大模型 API（DeepSeek/GLM/Kimi/百川/Azure OpenAI）—— endpoint、模型名、认证、思考开关、温度限制、上下文上限等实测坑点，附 probe.js 一键探活 |
 
 ## Categories
 
