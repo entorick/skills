@@ -27,6 +27,25 @@ fi
 
 errors=0
 
+# Remove dangling symlinks that point at a skill dir which no longer exists in
+# this repo (skill deleted or renamed). Only touches links targeting $SKILLS_DIR.
+cleanup_stale_links() {
+    local target_root="$1" link target
+    shopt -s nullglob
+    for link in "$target_root"/*; do
+        [[ -L "$link" ]] || continue
+        target="$(readlink "$link")"
+        case "$target" in
+            "$SKILLS_DIR"/*) ;;
+            *) continue ;;
+        esac
+        if [[ ! -d "$target" ]]; then
+            rm "$link"
+            echo "  stale   $link (skill dir removed from repo)"
+        fi
+    done
+}
+
 install_one() {
     local skill_dir="$1" target_root="$2"
     local name link
@@ -74,6 +93,7 @@ for skill_dir in "$SKILLS_DIR"/*/*/; do
     echo "skill: $(basename "$skill_dir")"
     for target_root in "${TARGET_ROOTS[@]}"; do
         if [[ "$MODE" == "install" ]]; then
+            cleanup_stale_links "$target_root"
             install_one "$skill_dir" "$target_root"
         else
             remove_one "$skill_dir" "$target_root"
