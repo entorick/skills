@@ -19,6 +19,7 @@ install.sh                        # Symlink skills into ~/.claude/skills + ~/.co
 index.md                          # Skill registry — keep updated when adding/removing skills
 scripts/validate.py               # Repo checks (frontmatter, index sync, pytest) — run before committing
 scripts/self-update.sh            # Pull latest skills from origin/main and re-sync symlinks
+scripts/agent-notify/             # CLI-agent completion notifier (dingtalk hooks), zero-dep Node
 skills/
   <category>/                     # Grouped by domain
     <skill-name>/
@@ -40,7 +41,6 @@ for all names (e.g., `project-management/zentao/`).
 |----------|-------|
 | `project-management` | Project tracking and issue management tools |
 | `document` | 文档格式转换与生成（md → docx 等） |
-| `automation` | CLI agent 编排与自动化（看板调度、通知、重试；Node.js 技能见 agent-board） |
 
 ## Installing / Using Skills
 
@@ -57,6 +57,26 @@ lands directly in the repo working tree, ready to be reviewed and committed.
 - Never overwrites a real directory at the target — it errors and asks the
   human to move it aside first.
 - On a new machine: `git clone <this-repo> && cd skills && ./install.sh`.
+
+## CLI-agent Completion Notifier (scripts/agent-notify/)
+
+Not a skill — a zero-dependency Node installer that gives every detected CLI
+agent tool a "session finished → DingTalk" hook. Agents should use it when the
+user wants completion pings (e.g. "跑完钉钉通知我"):
+
+```bash
+node scripts/agent-notify/cli.js install     # detect agents, inject hooks
+node scripts/agent-notify/cli.js notify-test # send a real test message
+node scripts/agent-notify/cli.js status      # what's detected / configured
+node scripts/agent-notify/cli.js uninstall   # remove injected hooks
+```
+
+- Webhook comes from `~/agent-board/config.json` (`notify.dingtalk_webhook`,
+  `at_mobile`, `keyword`) — gitignored, per machine.
+- Supported: codebuddy/claude (`hooks.Stop`), codex (`notify` program),
+  opencode (`~/.config/opencode/plugins/agent-notify.js`, session.idle).
+- Never edits an existing `notify=` in codex config; backs up configs before
+  first change.
 
 ## Skill File Format
 
