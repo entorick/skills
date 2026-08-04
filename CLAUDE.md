@@ -73,6 +73,8 @@ node scripts/agent-notify/cli.js uninstall   # remove injected hooks
 
 - Webhook comes from `~/agent-board/config.json` (`notify.dingtalk_webhook`,
   `at_mobile`, `keyword`) — gitignored, per machine.
+- The notification includes the agent's last reply: codebuddy/claude read the
+  transcript tail, codex uses `last-assistant-message` (capped at 200 chars).
 - Supported: codebuddy/claude (`hooks.Stop`), codex (`notify` program),
   opencode (`~/.config/opencode/plugins/agent-notify.js`, session.idle).
 - Never edits an existing `notify=` in codex config; backs up configs before
