@@ -1,0 +1,13 @@
+{
+  "name": "agent-notify",
+  "version": "0.1.0",
+  "description": "DingTalk completion notifications for CLI agent tools (codebuddy/claude/codex/opencode) via native hooks",
+  "type": "module",
+  "private": true,
+  "bin": {
+    "agent-notify": "./cli.js"
+  },
+  "scripts": {
+    "test": "node --test test/"
+  }
+}

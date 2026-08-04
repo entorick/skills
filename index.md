@@ -10,8 +10,13 @@ Registry of all skills maintained in this repository.
 | [skill-mining](skills/meta/skill-mining/) | meta | 定期回顾 CLI agent 工作记录，识别值得沉淀的重复手工流程（扫描摘要 + 业务耦合度裁决） |
 | [self-update](skills/meta/self-update/) | meta | 从远端仓库 origin/main 拉取最新技能并重挂 symlink（git SHA 对比 + ff-only + stash 保护） |
 | [feishu](skills/integration/feishu/) | integration | 通过 lark-cli 访问飞书文档/表格/Wiki/多维表格/云空间（检测+安装+导出，含 --raw/wiki-unwrap/bot权限等踩坑修复） |
-| [agent-board](skills/automation/agent-board/) | automation | 看板驱动的 CLI agent 自动化：markdown 看板派发任务（codebuddy/claude/codex），429 自动重试，钉钉通知，本地 web 控制台 |
 | [cloud-llm-api](skills/integration/cloud-llm-api/) | integration | 调用国内云端大模型 API（DeepSeek/GLM/Kimi/百川/Azure OpenAI）—— endpoint、模型名、认证、思考开关、温度限制、上下文上限等实测坑点，附 probe.js 一键探活 |
+
+## 工具脚本
+
+| 路径 | 作用 |
+|------|------|
+| [agent-notify](scripts/agent-notify/) | 给本机各 CLI agent 工具（codebuddy/claude/codex/opencode）注入「会话完成 → 钉钉通知」hook，零依赖，`node cli.js install` 一键安装 |
 
 ## Categories
 
@@ -20,7 +25,6 @@ Registry of all skills maintained in this repository.
 - **data-export** — 本机应用数据导出与归档（Teams 聊天记录等）
 - **meta** — agent 自我迭代：从工作记录中挖掘并沉淀新能力
 - **integration** — 外部平台集成：本机 CLI 工具当作 MCP 用（飞书 lark-cli 等）
-- **automation** — CLI agent 编排与自动化（看板调度、通知、重试等）
 
 ## Usage
 
